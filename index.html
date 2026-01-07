@@ -1,0 +1,261 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Quiz - Sidebar Mode</title>
+    <style>
+        :root {
+            --bg-color: #f0f7f9;
+            --text-color: #2c5d72;
+            --correct-bg: #d4edda;
+            --correct-solid: #28a745;
+            --wrong-bg: #f8d7da;
+            --wrong-solid: #dc3545;
+            --flag-color: #d9534f;
+            --border-color: #cbdbe0;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+            align-items: start;
+        }
+
+        .questions-column { width: 100%; }
+
+        .sidebar {
+            position: sticky;
+            top: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .question-block {
+            background: white;
+            padding: 25px;
+            margin-bottom: 25px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            scroll-margin-top: 30px;
+            position: relative;
+        }
+
+        /* Simple Flag Icon in Upper Right */
+        .flag-icon {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            cursor: pointer;
+            font-size: 1.4rem;
+            color: #ccc; /* Default color */
+            transition: color 0.2s;
+            user-select: none;
+        }
+
+        .flag-icon.active {
+            color: var(--flag-color);
+        }
+
+        #nav-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            margin-top: 15px;
+        }
+
+        .nav-box {
+            height: 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #333;
+            border-radius: 4px;
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            background: white;
+            position: relative;
+        }
+
+        .nav-box.flagged::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 0 15px 15px 0;
+            border-color: transparent var(--flag-color) transparent transparent;
+        }
+
+        .nav-status-bar {
+            width: 100%;
+            height: 15px;
+            margin-top: auto;
+            background: #eee;
+            border-top: 1px solid #333;
+        }
+
+        .answered .nav-status-bar { background-color: #555; }
+        .correct-nav .nav-status-bar { background-color: var(--correct-solid) !important; }
+        .wrong-nav .nav-status-bar { background-color: var(--wrong-solid) !important; }
+
+        .option { display: block; padding: 10px; margin: 5px 0; border-radius: 5px; cursor: pointer; }
+        .correct { background-color: var(--correct-bg) !important; border: 1px solid var(--correct-solid); }
+        .wrong { background-color: var(--wrong-bg) !important; border: 1px solid var(--wrong-solid); }
+
+        .btn { background: #2c5d72; color: white; padding: 12px; border: none; border-radius: 4px; width: 100%; cursor: pointer; margin-top: 10px; font-weight: bold; }
+        .btn-row { display: flex; gap: 10px; }
+        .btn-secondary { background: #6c757d; flex: 1; }
+        
+        #result-box { display: none; padding: 15px; background: #2c5d72; color: white; border-radius: 8px; margin-bottom: 15px; text-align: center; }
+        textarea { width: 100%; height: 80px; margin-top: 40px; }
+
+        @media (max-width: 900px) {
+            .main-layout { grid-template-columns: 1fr; }
+            .sidebar { position: static; max-height: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-layout">
+    <div class="questions-column">
+        <div id="quiz-container"></div>
+        <button class="btn" id="submit-btn" onclick="submitQuiz()">Finish attempt...</button>
+        
+        <textarea id="json-input" placeholder="Paste your 100+ questions JSON here..."></textarea>
+        
+        <div class="btn-row">
+            <button class="btn btn-secondary" onclick="loadQuestions()">Update Questions</button>
+            <button class="btn btn-secondary" onclick="resetQuiz()">Reset Quiz</button>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <div id="result-box"></div>
+        <h3>Quiz navigation</h3>
+        <div id="nav-grid"></div>
+        <br>
+        <a href="#" style="font-size: 0.9rem;">Show all questions on one page</a>
+    </div>
+</div>
+
+<script>
+    let questions = [];
+    let flaggedQuestions = new Set();
+
+    function loadQuestions() {
+        const input = document.getElementById('json-input').value;
+        try {
+            questions = input ? JSON.parse(input) : [];
+            resetQuiz(); // Resetting UI state when new questions load
+        } catch (e) { alert("Invalid JSON format."); }
+    }
+
+    function resetQuiz() {
+        flaggedQuestions.clear();
+        document.getElementById('result-box').style.display = 'none';
+        renderQuiz();
+        renderNav();
+        window.scrollTo(0,0);
+    }
+
+    function renderNav() {
+        const grid = document.getElementById('nav-grid');
+        grid.innerHTML = '';
+        questions.forEach((_, i) => {
+            const a = document.createElement('a');
+            a.className = 'nav-box';
+            a.id = `nav-box-${i}`;
+            a.href = `#q-block-${i}`;
+            a.innerHTML = `<div>${i+1}</div><div class="nav-status-bar" id="stat-bar-${i}"></div>`;
+            grid.appendChild(a);
+        });
+    }
+
+    function renderQuiz() {
+        const container = document.getElementById('quiz-container');
+        container.innerHTML = '';
+        questions.forEach((q, i) => {
+            const div = document.createElement('div');
+            div.className = 'question-block';
+            div.id = `q-block-${i}`;
+            div.innerHTML = `
+                <div class="flag-icon" id="flag-${i}" onclick="toggleFlag(${i})">⚑</div>
+                <div style="font-size: 1.1rem; margin-bottom: 20px;"><strong>Question ${i+1}:</strong><br>${q.question}</div>
+                ${q.options.map((opt, oi) => `
+                    <label class="option" id="lbl-${i}-${oi}">
+                        <input type="radio" name="q${i}" value="${oi}" onchange="markAnswered(${i})">
+                        ${String.fromCharCode(97+oi)}. ${opt}
+                    </label>
+                `).join('')}
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function toggleFlag(i) {
+        const navBox = document.getElementById(`nav-box-${i}`);
+        const flagIcon = document.getElementById(`flag-${i}`);
+        if (flaggedQuestions.has(i)) {
+            flaggedQuestions.delete(i);
+            navBox.classList.remove('flagged');
+            flagIcon.classList.remove('active');
+        } else {
+            flaggedQuestions.add(i);
+            navBox.classList.add('flagged');
+            flagIcon.classList.add('active');
+        }
+    }
+
+    function markAnswered(i) {
+        document.getElementById(`nav-box-${i}`).classList.add('answered');
+    }
+
+    function submitQuiz() {
+        let score = 0;
+        questions.forEach((q, i) => {
+            const sel = document.querySelector(`input[name="q${i}"]:checked`);
+            const isCorrect = sel && parseInt(sel.value) === q.answer;
+            if(isCorrect) score++;
+
+            q.options.forEach((_, oi) => {
+                const lbl = document.getElementById(`lbl-${i}-${oi}`);
+                lbl.classList.remove('correct', 'wrong');
+                if(oi === q.answer) lbl.classList.add('correct');
+                else if(sel && parseInt(sel.value) === oi) lbl.classList.add('wrong');
+            });
+
+            const navBox = document.getElementById(`nav-box-${i}`);
+            navBox.classList.remove('answered', 'correct-nav', 'wrong-nav');
+            navBox.classList.add(isCorrect ? 'correct-nav' : 'wrong-nav');
+        });
+
+        const res = document.getElementById('result-box');
+        res.style.display = 'block';
+        res.innerHTML = `<strong>Final Grade</strong><br>${score} / ${questions.length}<br>(${Math.round(score/questions.length*100)}%)`;
+        window.scrollTo(0,0);
+    }
+</script>
+</body>
+</html>
