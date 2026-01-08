@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -57,21 +56,18 @@
             position: relative;
         }
 
-        /* Simple Flag Icon in Upper Right */
         .flag-icon {
             position: absolute;
             top: 15px;
             right: 15px;
             cursor: pointer;
             font-size: 1.4rem;
-            color: #ccc; /* Default color */
+            color: #ccc;
             transition: color 0.2s;
             user-select: none;
         }
 
-        .flag-icon.active {
-            color: var(--flag-color);
-        }
+        .flag-icon.active { color: var(--flag-color); }
 
         #nav-grid {
             display: grid;
@@ -130,6 +126,17 @@
         #result-box { display: none; padding: 15px; background: #2c5d72; color: white; border-radius: 8px; margin-bottom: 15px; text-align: center; }
         textarea { width: 100%; height: 80px; margin-top: 40px; }
 
+        .explanation-box {
+            display: none;
+            margin-top: 15px;
+            padding: 12px;
+            background-color: #e9f4f8;
+            border-left: 4px solid var(--text-color);
+            font-size: 0.95rem;
+            border-radius: 0 4px 4px 0;
+        }
+        .revealed .explanation-box { display: block; }
+
         @media (max-width: 900px) {
             .main-layout { grid-template-columns: 1fr; }
             .sidebar { position: static; max-height: none; }
@@ -143,11 +150,11 @@
         <div id="quiz-container"></div>
         <button class="btn" id="submit-btn" onclick="submitQuiz()">Finish attempt...</button>
         
-        <textarea id="json-input" placeholder="Add questions here"></textarea>
+        <textarea id="json-input" placeholder="Paste your questions JSON here..."></textarea>
         
         <div class="btn-row">
             <button class="btn btn-secondary" onclick="loadQuestions()">Update Questions</button>
-            <button class="btn btn-secondary" onclick="resetQuiz()">Reset Quiz</button>
+            <button class="btn btn-secondary" onclick="resetQuiz(true)">Reset Full Quiz</button>
             <button class="btn btn-secondary" id="retry-btn" onclick="retryWrongQuestions()" style="display:none; background: #e67e22;">Retry Wrong Answers</button>
         </div>
     </div>
@@ -162,79 +169,35 @@
 </div>
 
 <script>
-   let questions = [];
-    let currentQuizSet = []; // Track the currently active questions (full or subset)
+    let questions = [];
+    let currentQuizSet = [];
     let flaggedQuestions = new Set();
 
     function loadQuestions() {
         const input = document.getElementById('json-input').value;
         try {
-            questions = input ? JSON.parse(input) : [];
-            currentQuizSet = [...questions]; 
-            resetQuiz();
+            const parsed = input ? JSON.parse(input) : [];
+            const isValid = parsed.every((q, index) => {
+                const hasCorrectIndex = typeof q.answer === 'number' && q.answer >= 0 && q.answer < q.options.length;
+                if (!hasCorrectIndex) alert(`Error in Q${index + 1}: Answer index ${q.answer} is invalid.`);
+                return hasCorrectIndex;
+            });
+
+            if (isValid) {
+                questions = parsed;
+                resetQuiz(true);
+            }
         } catch (e) { alert("Invalid JSON format."); }
     }
 
-    function resetQuiz() {
-        currentQuizSet = [...questions]; // Revert to full list
+    function resetQuiz(fullReset = true) {
+        if (fullReset) currentQuizSet = [...questions];
         flaggedQuestions.clear();
         document.getElementById('result-box').style.display = 'none';
         document.getElementById('retry-btn').style.display = 'none';
         renderQuiz();
         renderNav();
         window.scrollTo(0,0);
-    }
-
-    // New Function: Filter, Shuffle, and Reload
-    function retryWrongQuestions() {
-        const wrongQuestions = [];
-        
-        // Check which ones were wrong in the current set
-        currentQuizSet.forEach((q, i) => {
-            const sel = document.querySelector(`input[name="q${i}"]:checked`);
-            const isCorrect = sel && parseInt(sel.value) === q.answer;
-            if (!isCorrect) {
-                wrongQuestions.push(q);
-            }
-        });
-
-        if (wrongQuestions.length === 0) {
-            alert("No wrong answers to review! Well done.");
-            return;
-        }
-
-        // Shuffle the wrong answers
-        currentQuizSet = shuffleArray(wrongQuestions);
-        
-        // Reset UI for the new subset
-        flaggedQuestions.clear();
-        document.getElementById('result-box').style.display = 'none';
-        document.getElementById('retry-btn').style.display = 'none';
-        renderQuiz();
-        renderNav();
-        window.scrollTo(0,0);
-    }
-
-    // Helper: Fisher-Yates Shuffle
-    function shuffleArray(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
-        return array;
-    }
-
-    function renderNav() {
-        const grid = document.getElementById('nav-grid');
-        grid.innerHTML = '';
-        currentQuizSet.forEach((_, i) => {
-            const a = document.createElement('a');
-            a.className = 'nav-box';
-            a.id = `nav-box-${i}`;
-            a.href = `#q-block-${i}`;
-            a.innerHTML = `<div>${i+1}</div><div class="nav-status-bar" id="stat-bar-${i}"></div>`;
-            grid.appendChild(a);
-        });
     }
 
     function renderQuiz() {
@@ -253,8 +216,22 @@
                         ${String.fromCharCode(97+oi)}. ${opt}
                     </label>
                 `).join('')}
+                <div class="explanation-box" id="exp-${i}"><strong>Explanation:</strong> ${q.explanation || 'No explanation provided.'}</div>
             `;
             container.appendChild(div);
+        });
+    }
+
+    function renderNav() {
+        const grid = document.getElementById('nav-grid');
+        grid.innerHTML = '';
+        currentQuizSet.forEach((_, i) => {
+            const a = document.createElement('a');
+            a.className = 'nav-box';
+            a.id = `nav-box-${i}`;
+            a.href = `#q-block-${i}`;
+            a.innerHTML = `<div>${i+1}</div><div class="nav-status-bar" id="stat-bar-${i}"></div>`;
+            grid.appendChild(a);
         });
     }
 
@@ -283,6 +260,7 @@
             const isCorrect = sel && parseInt(sel.value) === q.answer;
             if(isCorrect) score++;
 
+            // Visual feedback for options
             q.options.forEach((_, oi) => {
                 const lbl = document.getElementById(`lbl-${i}-${oi}`);
                 lbl.classList.remove('correct', 'wrong');
@@ -290,18 +268,44 @@
                 else if(sel && parseInt(sel.value) === oi) lbl.classList.add('wrong');
             });
 
+            // Reveal explanation and update nav
+            document.getElementById(`q-block-${i}`).classList.add('revealed');
             const navBox = document.getElementById(`nav-box-${i}`);
-            navBox.classList.remove('answered', 'correct-nav', 'wrong-nav');
+            navBox.classList.remove('answered');
             navBox.classList.add(isCorrect ? 'correct-nav' : 'wrong-nav');
         });
 
         const res = document.getElementById('result-box');
         res.style.display = 'block';
         res.innerHTML = `<strong>Final Grade</strong><br>${score} / ${currentQuizSet.length}<br>(${Math.round(score/currentQuizSet.length*100)}%)`;
-        
-        // Show the retry button after submission
         document.getElementById('retry-btn').style.display = 'block';
         window.scrollTo(0,0);
+    }
+
+    function retryWrongQuestions() {
+        const wrongQuestions = [];
+        currentQuizSet.forEach((q, i) => {
+            const sel = document.querySelector(`input[name="q${i}"]:checked`);
+            if (!(sel && parseInt(sel.value) === q.answer)) {
+                wrongQuestions.push(q);
+            }
+        });
+
+        if (wrongQuestions.length === 0) {
+            alert("Perfect score! Nothing to retry.");
+            return;
+        }
+
+        currentQuizSet = shuffleArray([...wrongQuestions]);
+        resetQuiz(false); // Reset UI without reverting to the full question list
+    }
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
     }
 </script>
 </body>
