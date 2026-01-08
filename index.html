@@ -148,6 +148,7 @@
         <div class="btn-row">
             <button class="btn btn-secondary" onclick="loadQuestions()">Update Questions</button>
             <button class="btn btn-secondary" onclick="resetQuiz()">Reset Quiz</button>
+            <button class="btn btn-secondary" id="retry-btn" onclick="retryWrongQuestions()" style="display:none; background: #e67e22;">Retry Wrong Answers</button>
         </div>
     </div>
 
@@ -161,29 +162,72 @@
 </div>
 
 <script>
-    let questions = [];
+   let questions = [];
+    let currentQuizSet = []; // Track the currently active questions (full or subset)
     let flaggedQuestions = new Set();
 
     function loadQuestions() {
         const input = document.getElementById('json-input').value;
         try {
             questions = input ? JSON.parse(input) : [];
-            resetQuiz(); // Resetting UI state when new questions load
+            currentQuizSet = [...questions]; 
+            resetQuiz();
         } catch (e) { alert("Invalid JSON format."); }
     }
 
     function resetQuiz() {
+        currentQuizSet = [...questions]; // Revert to full list
         flaggedQuestions.clear();
         document.getElementById('result-box').style.display = 'none';
+        document.getElementById('retry-btn').style.display = 'none';
         renderQuiz();
         renderNav();
         window.scrollTo(0,0);
     }
 
+    // New Function: Filter, Shuffle, and Reload
+    function retryWrongQuestions() {
+        const wrongQuestions = [];
+        
+        // Check which ones were wrong in the current set
+        currentQuizSet.forEach((q, i) => {
+            const sel = document.querySelector(`input[name="q${i}"]:checked`);
+            const isCorrect = sel && parseInt(sel.value) === q.answer;
+            if (!isCorrect) {
+                wrongQuestions.push(q);
+            }
+        });
+
+        if (wrongQuestions.length === 0) {
+            alert("No wrong answers to review! Well done.");
+            return;
+        }
+
+        // Shuffle the wrong answers
+        currentQuizSet = shuffleArray(wrongQuestions);
+        
+        // Reset UI for the new subset
+        flaggedQuestions.clear();
+        document.getElementById('result-box').style.display = 'none';
+        document.getElementById('retry-btn').style.display = 'none';
+        renderQuiz();
+        renderNav();
+        window.scrollTo(0,0);
+    }
+
+    // Helper: Fisher-Yates Shuffle
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
     function renderNav() {
         const grid = document.getElementById('nav-grid');
         grid.innerHTML = '';
-        questions.forEach((_, i) => {
+        currentQuizSet.forEach((_, i) => {
             const a = document.createElement('a');
             a.className = 'nav-box';
             a.id = `nav-box-${i}`;
@@ -196,7 +240,7 @@
     function renderQuiz() {
         const container = document.getElementById('quiz-container');
         container.innerHTML = '';
-        questions.forEach((q, i) => {
+        currentQuizSet.forEach((q, i) => {
             const div = document.createElement('div');
             div.className = 'question-block';
             div.id = `q-block-${i}`;
@@ -234,7 +278,7 @@
 
     function submitQuiz() {
         let score = 0;
-        questions.forEach((q, i) => {
+        currentQuizSet.forEach((q, i) => {
             const sel = document.querySelector(`input[name="q${i}"]:checked`);
             const isCorrect = sel && parseInt(sel.value) === q.answer;
             if(isCorrect) score++;
@@ -253,7 +297,10 @@
 
         const res = document.getElementById('result-box');
         res.style.display = 'block';
-        res.innerHTML = `<strong>Final Grade</strong><br>${score} / ${questions.length}<br>(${Math.round(score/questions.length*100)}%)`;
+        res.innerHTML = `<strong>Final Grade</strong><br>${score} / ${currentQuizSet.length}<br>(${Math.round(score/currentQuizSet.length*100)}%)`;
+        
+        // Show the retry button after submission
+        document.getElementById('retry-btn').style.display = 'block';
         window.scrollTo(0,0);
     }
 </script>
