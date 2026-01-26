@@ -120,8 +120,8 @@
         .wrong { background-color: var(--wrong-bg) !important; border: 1px solid var(--wrong-solid); }
 
         .btn { background: #2c5d72; color: white; padding: 12px; border: none; border-radius: 4px; width: 100%; cursor: pointer; margin-top: 10px; font-weight: bold; }
-        .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
-        .btn-secondary { background: #6c757d; flex: 1; min-width: 120px; }
+        .btn-row { display: flex; gap: 10px; }
+        .btn-secondary { background: #6c757d; flex: 1; }
         
         #result-box { display: none; padding: 15px; background: #2c5d72; color: white; border-radius: 8px; margin-bottom: 15px; text-align: center; }
         textarea { width: 100%; height: 80px; margin-top: 40px; }
@@ -155,7 +155,6 @@
         <div class="btn-row">
             <button class="btn btn-secondary" onclick="loadQuestions()">Update Questions</button>
             <button class="btn btn-secondary" onclick="resetQuiz(true)">Reset Full Quiz</button>
-            <button class="btn btn-secondary" onclick="generateShareLink()" style="background: #27ae60;">Share Quiz Link</button>
             <button class="btn btn-secondary" id="retry-btn" onclick="retryWrongQuestions()" style="display:none; background: #e67e22;">Retry Wrong Answers</button>
         </div>
     </div>
@@ -173,45 +172,6 @@
     let questions = [];
     let currentQuizSet = [];
     let flaggedQuestions = new Set();
-
-    // AUTO-LOAD FEATURE: Checks the URL for a 'quiz' parameter on startup
-    window.onload = function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const sharedQuiz = urlParams.get('quiz');
-        if (sharedQuiz) {
-            try {
-                // Decode from Base64
-                const decodedData = decodeURIComponent(atob(sharedQuiz));
-                document.getElementById('json-input').value = decodedData;
-                loadQuestions();
-                console.log("Quiz preloaded from link successfully.");
-            } catch (e) {
-                console.error("Error loading shared quiz:", e);
-                alert("The share link appears to be invalid.");
-            }
-        }
-    };
-
-    // GENERATE LINK FUNCTION
-    function generateShareLink() {
-        const jsonText = document.getElementById('json-input').value;
-        if (!jsonText.trim()) {
-            alert("Please load some questions first!");
-            return;
-        }
-        try {
-            // Encode JSON to Base64 to make it safe for a URL
-            const encoded = btoa(encodeURIComponent(jsonText));
-            const shareUrl = window.location.origin + window.location.pathname + '?quiz=' + encoded;
-            
-            // Copy to clipboard
-            navigator.clipboard.writeText(shareUrl).then(() => {
-                alert("Link copied to clipboard! You can now share this preloaded test.");
-            });
-        } catch (e) {
-            alert("Quiz is too large to share via link. Try a smaller set of questions.");
-        }
-    }
 
     function loadQuestions() {
         const input = document.getElementById('json-input').value;
@@ -290,8 +250,7 @@
     }
 
     function markAnswered(i) {
-        const navBox = document.getElementById(`nav-box-${i}`);
-        if (navBox) navBox.classList.add('answered');
+        document.getElementById(`nav-box-${i}`).classList.add('answered');
     }
 
     function submitQuiz() {
@@ -301,6 +260,7 @@
             const isCorrect = sel && parseInt(sel.value) === q.answer;
             if(isCorrect) score++;
 
+            // Visual feedback for options
             q.options.forEach((_, oi) => {
                 const lbl = document.getElementById(`lbl-${i}-${oi}`);
                 lbl.classList.remove('correct', 'wrong');
@@ -308,6 +268,7 @@
                 else if(sel && parseInt(sel.value) === oi) lbl.classList.add('wrong');
             });
 
+            // Reveal explanation and update nav
             document.getElementById(`q-block-${i}`).classList.add('revealed');
             const navBox = document.getElementById(`nav-box-${i}`);
             navBox.classList.remove('answered');
@@ -336,7 +297,7 @@
         }
 
         currentQuizSet = shuffleArray([...wrongQuestions]);
-        resetQuiz(false);
+        resetQuiz(false); // Reset UI without reverting to the full question list
     }
 
     function shuffleArray(array) {
