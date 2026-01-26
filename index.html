@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Medical Quiz - Sidebar Mode</title>
+    <title>Medical Quiz Builder</title>
     <style>
         :root {
             --bg-color: #f0f7f9;
@@ -115,16 +115,17 @@
         .correct-nav .nav-status-bar { background-color: var(--correct-solid) !important; }
         .wrong-nav .nav-status-bar { background-color: var(--wrong-solid) !important; }
 
-        .option { display: block; padding: 10px; margin: 5px 0; border-radius: 5px; cursor: pointer; }
-        .correct { background-color: var(--correct-bg) !important; border: 1px solid var(--correct-solid); }
-        .wrong { background-color: var(--wrong-bg) !important; border: 1px solid var(--wrong-solid); }
+        .option { display: block; padding: 10px; margin: 5px 0; border-radius: 5px; cursor: pointer; border: 1px solid transparent; }
+        .correct { background-color: var(--correct-bg) !important; border-color: var(--correct-solid); }
+        .wrong { background-color: var(--wrong-bg) !important; border-color: var(--wrong-solid); }
 
         .btn { background: #2c5d72; color: white; padding: 12px; border: none; border-radius: 4px; width: 100%; cursor: pointer; margin-top: 10px; font-weight: bold; }
-        .btn-row { display: flex; gap: 10px; }
+        .btn-row { display: flex; gap: 10px; margin-top: 10px; }
         .btn-secondary { background: #6c757d; flex: 1; }
+        .btn-save { background: #27ae60; flex: 1; }
         
         #result-box { display: none; padding: 15px; background: #2c5d72; color: white; border-radius: 8px; margin-bottom: 15px; text-align: center; }
-        textarea { width: 100%; height: 80px; margin-top: 40px; }
+        textarea { width: 100%; height: 120px; margin-top: 40px; border-radius: 5px; border: 1px solid #ccc; padding: 10px; }
 
         .explanation-box {
             display: none;
@@ -153,41 +154,64 @@
         <textarea id="json-input" placeholder="Paste your questions JSON here..."></textarea>
         
         <div class="btn-row">
-            <button class="btn btn-secondary" onclick="loadQuestions()">Update Questions</button>
-            <button class="btn btn-secondary" onclick="resetQuiz(true)">Reset Full Quiz</button>
-            <button class="btn btn-secondary" id="retry-btn" onclick="retryWrongQuestions()" style="display:none; background: #e67e22;">Retry Wrong Answers</button>
+            <button class="btn btn-secondary" onclick="loadQuestions()">Load Questions</button>
+            <button class="btn btn-save" onclick="downloadQuiz()">Download Quiz</button>
+            <button class="btn btn-secondary" onclick="resetQuiz(true)">Reset</button>
         </div>
+        <button class="btn" id="retry-btn" onclick="retryWrongQuestions()" style="display:none; background: #e67e22;">Retry Wrong Answers</button>
     </div>
 
     <div class="sidebar">
         <div id="result-box"></div>
         <h3>Quiz navigation</h3>
         <div id="nav-grid"></div>
-        <br>
-        <a href="#" style="font-size: 0.9rem;">Show all questions on one page</a>
     </div>
 </div>
 
 <script>
-    let questions = [];
+    // This variable will be automatically populated in the "Downloaded" version
+    let questions = []; 
     let currentQuizSet = [];
     let flaggedQuestions = new Set();
+
+    // AUTO-LOAD: If questions were baked in during download, load them immediately
+    window.onload = function() {
+        if (questions.length > 0) {
+            document.getElementById('json-input').style.display = 'none'; // Hide editor for students
+            resetQuiz(true);
+        }
+    };
 
     function loadQuestions() {
         const input = document.getElementById('json-input').value;
         try {
             const parsed = input ? JSON.parse(input) : [];
-            const isValid = parsed.every((q, index) => {
-                const hasCorrectIndex = typeof q.answer === 'number' && q.answer >= 0 && q.answer < q.options.length;
-                if (!hasCorrectIndex) alert(`Error in Q${index + 1}: Answer index ${q.answer} is invalid.`);
-                return hasCorrectIndex;
-            });
-
-            if (isValid) {
+            if (parsed.length > 0) {
                 questions = parsed;
                 resetQuiz(true);
             }
         } catch (e) { alert("Invalid JSON format."); }
+    }
+
+    function downloadQuiz() {
+        const jsonContent = document.getElementById('json-input').value;
+        if (!jsonContent) return alert("Please add questions first!");
+
+        const fileName = prompt("Enter quiz name:", "Medical_Quiz");
+        if (!fileName) return;
+
+        // Get the current HTML and inject the JSON directly into the questions variable
+        let currentHTML = document.documentElement.outerHTML;
+        const scriptInjected = `let questions = ${jsonContent};`;
+        
+        // Find the "let questions = [];" line and replace it with the actual data
+        const updatedHTML = currentHTML.replace("let questions = [];", scriptInjected);
+
+        const blob = new Blob([updatedHTML], { type: 'text/html' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${fileName.replace(/\s+/g, '_')}.html`;
+        link.click();
     }
 
     function resetQuiz(fullReset = true) {
@@ -260,7 +284,6 @@
             const isCorrect = sel && parseInt(sel.value) === q.answer;
             if(isCorrect) score++;
 
-            // Visual feedback for options
             q.options.forEach((_, oi) => {
                 const lbl = document.getElementById(`lbl-${i}-${oi}`);
                 lbl.classList.remove('correct', 'wrong');
@@ -268,7 +291,6 @@
                 else if(sel && parseInt(sel.value) === oi) lbl.classList.add('wrong');
             });
 
-            // Reveal explanation and update nav
             document.getElementById(`q-block-${i}`).classList.add('revealed');
             const navBox = document.getElementById(`nav-box-${i}`);
             navBox.classList.remove('answered');
@@ -292,12 +314,12 @@
         });
 
         if (wrongQuestions.length === 0) {
-            alert("Perfect score! Nothing to retry.");
+            alert("Perfect score!");
             return;
         }
 
         currentQuizSet = shuffleArray([...wrongQuestions]);
-        resetQuiz(false); // Reset UI without reverting to the full question list
+        resetQuiz(false);
     }
 
     function shuffleArray(array) {
